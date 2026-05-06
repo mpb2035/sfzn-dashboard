@@ -37,6 +37,8 @@ export function AppSidebar() {
   const { groups, getGroupItems, getGroupLabel, loading, iconMap } = useSidebarConfig();
   const collapsed = state === 'collapsed';
 
+  const STANDARD_USER_PATHS = new Set(['/', '/project-workflow', '/todo']);
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const isOpen = (group: string) => openGroups[group] ?? true;
@@ -45,7 +47,8 @@ export function AppSidebar() {
   };
 
   const renderItems = (groupName: string) => {
-    const items = getGroupItems(groupName);
+    let items = getGroupItems(groupName);
+    if (!isAdmin) items = items.filter(i => STANDARD_USER_PATHS.has(i.item_path));
     return items.map((item) => {
       const iconName = iconMap[item.item_path] || 'LayoutDashboard';
       const IconComp = ICON_COMPONENTS[iconName] || LayoutDashboard;
