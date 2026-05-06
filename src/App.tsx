@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
+import HomeRouter from "./pages/HomeRouter";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Analytics from "./pages/Analytics";
@@ -47,7 +47,7 @@ function AppRoutes() {
     <ProtectedRoute>
       <AppLayout>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<HomeRouter />} />
           <Route path="/attachment-overseas" element={<AttachmentOverseas />} />
           <Route path="/in-process" element={<InProcessMatters />} />
           <Route path="/analytics" element={<Analytics />} />
