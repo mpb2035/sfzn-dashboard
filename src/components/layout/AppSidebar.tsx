@@ -78,7 +78,8 @@ export function AppSidebar() {
       <SidebarContent className="pt-4">
         {groups.map((groupName) => {
           const GroupIcon = GROUP_ICONS[groupName] || Folder;
-          const groupItems = getGroupItems(groupName);
+          let groupItems = getGroupItems(groupName);
+          if (!isAdmin) groupItems = groupItems.filter(i => STANDARD_USER_PATHS.has(i.item_path));
           if (groupItems.length === 0) return null;
 
           return (
