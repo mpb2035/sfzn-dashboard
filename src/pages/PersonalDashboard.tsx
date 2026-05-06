@@ -17,9 +17,9 @@ export default function PersonalDashboard() {
   const completedProjects = projects.filter(p => p.status === 'completed');
   const atRisk = projects.filter(p => p.status === 'at-risk' || p.status === 'delayed');
 
-  const totalSubTodos = todos.reduce((acc, t) => acc + (t.subTodos?.length || 0), 0);
+  const totalSubTodos = todos.reduce((acc, t) => acc + (t.sub_todos?.length || 0), 0);
   const doneSubTodos = todos.reduce(
-    (acc, t) => acc + (t.subTodos?.filter(s => s.is_done).length || 0),
+    (acc, t) => acc + (t.sub_todos?.filter(s => s.is_done).length || 0),
     0,
   );
 
@@ -150,8 +150,8 @@ export default function PersonalDashboard() {
               </p>
             ) : (
               todos.slice(0, 5).map(t => {
-                const total = t.subTodos?.length || 0;
-                const done = t.subTodos?.filter(s => s.is_done).length || 0;
+                const total = t.sub_todos?.length || 0;
+                const done = t.sub_todos?.filter(s => s.is_done).length || 0;
                 return (
                   <div
                     key={t.id}
