@@ -243,7 +243,17 @@ const Auth = () => {
             Continue with Google
           </Button>
 
-          <div className="mt-4 text-center">
+          <div className="mt-4 text-center space-y-2">
+            {isLogin && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={loading}
+                className="block w-full text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Forgot password?
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
