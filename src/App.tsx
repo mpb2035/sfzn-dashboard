@@ -26,18 +26,20 @@ import FinancialPlan from "./pages/FinancialPlan";
 import MatterLogsScorecard from "./pages/MatterLogsScorecard";
 import NotesPage from "./pages/NotesPage";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
   const location = useLocation();
-  const isAuthPage = location.pathname === '/auth';
+  const isPublic = location.pathname === '/auth' || location.pathname === '/reset-password';
 
-  // Auth page without sidebar
-  if (isAuthPage) {
+  // Public pages without sidebar
+  if (isPublic) {
     return (
       <Routes>
         <Route path="/auth" element={<Auth />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
     );
   }
