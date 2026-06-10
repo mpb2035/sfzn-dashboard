@@ -87,13 +87,13 @@ export default function ManpowerAKPI() {
   }, [derived]);
 
   const byAspirasi = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
+    const map: Record<string, Record<AKPIStatus, number> & { total: number }> = {};
     derived.forEach(d => {
       if (!map[d.aspirasi]) map[d.aspirasi] = { 'On Track': 0, 'Needs Attention': 0, 'Behind': 0, 'No Data': 0, 'Target Not Set': 0, total: 0 };
       map[d.aspirasi][d.status]++;
       map[d.aspirasi].total++;
     });
-    return Object.entries(map).map(([asp, c]) => ({ aspirasi: asp, ...c }));
+    return Object.entries(map).map(([aspirasi, c]) => ({ aspirasi, ...c }));
   }, [derived]);
 
   const yearCompleteness = useMemo(() =>
