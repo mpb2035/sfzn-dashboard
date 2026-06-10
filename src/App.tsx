@@ -25,6 +25,7 @@ import AttachmentOverseas from "./pages/AttachmentOverseas";
 import FinancialPlan from "./pages/FinancialPlan";
 import MatterLogsScorecard from "./pages/MatterLogsScorecard";
 import NotesPage from "./pages/NotesPage";
+import ManpowerAKPI from "./pages/ManpowerAKPI";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -67,6 +68,7 @@ function AppRoutes() {
           <Route path="/financial-plan" element={<FinancialPlan />} />
           <Route path="/matter-logs" element={<MatterLogsScorecard />} />
           <Route path="/notes" element={<NotesPage />} />
+          <Route path="/manpower-akpi" element={<ManpowerAKPI />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
