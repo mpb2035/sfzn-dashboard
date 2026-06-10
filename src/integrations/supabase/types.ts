@@ -14,6 +14,145 @@ export type Database = {
   }
   public: {
     Tables: {
+      akpi_changelog: {
+        Row: {
+          akpi_code: string | null
+          changed_by: string | null
+          changed_by_email: string | null
+          created_at: string
+          field_changed: string
+          id: string
+          indicator_id: string | null
+          new_value: string | null
+          old_value: string | null
+        }
+        Insert: {
+          akpi_code?: string | null
+          changed_by?: string | null
+          changed_by_email?: string | null
+          created_at?: string
+          field_changed: string
+          id?: string
+          indicator_id?: string | null
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Update: {
+          akpi_code?: string | null
+          changed_by?: string | null
+          changed_by_email?: string | null
+          created_at?: string
+          field_changed?: string
+          id?: string
+          indicator_id?: string | null
+          new_value?: string | null
+          old_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "akpi_changelog_indicator_id_fkey"
+            columns: ["indicator_id"]
+            isOneToOne: false
+            referencedRelation: "akpi_indicators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      akpi_indicators: {
+        Row: {
+          akpi_code: string
+          aspirasi: string
+          created_at: string
+          definition_bm: string | null
+          definition_en: string | null
+          direction: string
+          id: string
+          indicator_bm: string
+          indicator_en: string | null
+          lead_agency: string | null
+          metric_type: string | null
+          review_cycle: string | null
+          sort_order: number
+          source_note: string | null
+          target_2035: number | null
+          updated_at: string
+          validation_note: string | null
+        }
+        Insert: {
+          akpi_code: string
+          aspirasi: string
+          created_at?: string
+          definition_bm?: string | null
+          definition_en?: string | null
+          direction?: string
+          id?: string
+          indicator_bm: string
+          indicator_en?: string | null
+          lead_agency?: string | null
+          metric_type?: string | null
+          review_cycle?: string | null
+          sort_order?: number
+          source_note?: string | null
+          target_2035?: number | null
+          updated_at?: string
+          validation_note?: string | null
+        }
+        Update: {
+          akpi_code?: string
+          aspirasi?: string
+          created_at?: string
+          definition_bm?: string | null
+          definition_en?: string | null
+          direction?: string
+          id?: string
+          indicator_bm?: string
+          indicator_en?: string | null
+          lead_agency?: string | null
+          metric_type?: string | null
+          review_cycle?: string | null
+          sort_order?: number
+          source_note?: string | null
+          target_2035?: number | null
+          updated_at?: string
+          validation_note?: string | null
+        }
+        Relationships: []
+      }
+      akpi_yearly_values: {
+        Row: {
+          created_at: string
+          id: string
+          indicator_id: string
+          updated_at: string
+          value: number | null
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          indicator_id: string
+          updated_at?: string
+          value?: number | null
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          indicator_id?: string
+          updated_at?: string
+          value?: number | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "akpi_yearly_values_indicator_id_fkey"
+            columns: ["indicator_id"]
+            isOneToOne: false
+            referencedRelation: "akpi_indicators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachment_overseas: {
         Row: {
           country: string
