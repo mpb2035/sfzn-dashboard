@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAKPI, AKPI_YEARS, HISTORICAL_YEARS, AKPIDerived, AKPIStatus, getStatusColor } from '@/hooks/useAKPI';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Download, Info, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HelpCircle, Target } from 'lucide-react';
+import { Loader2, Download, Info, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HelpCircle, Target, Activity, Zap, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
@@ -19,6 +19,66 @@ import {
 import * as XLSX from 'xlsx';
 
 const STATUS_ORDER: AKPIStatus[] = ['On Track', 'Needs Attention', 'Behind', 'No Data', 'Target Not Set'];
+
+type ProjectionScenario = 'low' | 'medium' | 'high';
+interface ProjectionRates { low: number; medium: number; high: number }
+const PROJECTION_STORAGE_KEY = 'akpi_projection_rates_v1';
+const DEFAULT_RATES: ProjectionRates = { low: 2, medium: 5, high: 10 };
+const SCENARIO_META: Record<ProjectionScenario, { label: string; color: string; icon: typeof Activity }> = {
+  low:    { label: 'Low Projection',    color: 'hsl(0 84% 60%)',  icon: TrendingDown },
+  medium: { label: 'Medium Projection', color: 'hsl(38 92% 50%)', icon: Activity },
+  high:   { label: 'High Projection',   color: 'hsl(142 71% 45%)', icon: Zap },
+};
+
+interface ProjectionResult {
+  projected2035: number | null;
+  projectedProgressPct: number | null;
+  willMeetTarget: boolean;
+  trajectory: { year: string; historical: number | null; projected: number | null; target: number | null }[];
+}
+
+function computeProjection(d: AKPIDerived, ratePct: number): ProjectionResult {
+  const empty: ProjectionResult = { projected2035: null, projectedProgressPct: null, willMeetTarget: false, trajectory: [] };
+  if (d.latestValue == null || d.latestYear == null) return empty;
+  const r = ratePct / 100;
+  const trajectory = AKPI_YEARS.map(y => {
+    if (y < d.latestYear!) {
+      const v = d.values[y];
+      return { year: String(y), historical: v == null ? null : Number(v), projected: null as number | null, target: d.target_2035 };
+    }
+    if (y === d.latestYear) {
+      return { year: String(y), historical: d.latestValue, projected: d.latestValue, target: d.target_2035 };
+    }
+    const yrs = y - d.latestYear!;
+    const factor = d.isHigherBetter ? Math.pow(1 + r, yrs) : Math.pow(Math.max(1 - r, 0), yrs);
+    return { year: String(y), historical: null, projected: d.latestValue! * factor, target: d.target_2035 };
+  });
+  const projected2035 = trajectory[trajectory.length - 1].projected;
+  let projectedProgressPct: number | null = null;
+  let willMeetTarget = false;
+  if (d.target_2035 != null && projected2035 != null) {
+    if (d.isHigherBetter) {
+      projectedProgressPct = d.target_2035 === 0 ? (projected2035 >= 0 ? 1 : 0) : projected2035 / d.target_2035;
+      willMeetTarget = projected2035 >= d.target_2035;
+    } else {
+      projectedProgressPct = d.target_2035 === 0 ? (projected2035 === 0 ? 1 : 0) : d.target_2035 / Math.max(projected2035, 0.0001);
+      willMeetTarget = projected2035 <= d.target_2035;
+    }
+  }
+  return { projected2035, projectedProgressPct, willMeetTarget, trajectory };
+}
+
+function hasNoProgress(d: AKPIDerived): boolean {
+  const points: number[] = [];
+  for (const y of HISTORICAL_YEARS) {
+    const v = d.values[y];
+    if (v != null && !Number.isNaN(Number(v))) points.push(Number(v));
+  }
+  if (points.length < 2) return false;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return d.isHigherBetter ? last <= first : last >= first;
+}
 
 const StatusBadge = ({ status }: { status: AKPIStatus }) => (
   <Badge style={{ background: `${getStatusColor(status)}25`, color: getStatusColor(status), borderColor: `${getStatusColor(status)}50` }} variant="outline">
@@ -70,6 +130,43 @@ export default function ManpowerAKPI() {
   const [aspirasiFilter, setAspirasiFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<AKPIStatus | 'all'>('all');
   const [detail, setDetail] = useState<AKPIDerived | null>(null);
+
+  // Projection state — persisted in localStorage
+  const [rates, setRates] = useState<ProjectionRates>(() => {
+    try {
+      const raw = localStorage.getItem(PROJECTION_STORAGE_KEY);
+      if (raw) return { ...DEFAULT_RATES, ...JSON.parse(raw) };
+    } catch { /* noop */ }
+    return DEFAULT_RATES;
+  });
+  const [draftRates, setDraftRates] = useState<ProjectionRates>(rates);
+  const [scenario, setScenario] = useState<ProjectionScenario>('medium');
+  useEffect(() => { setDraftRates(rates); }, [rates]);
+
+  const saveRates = () => {
+    setRates(draftRates);
+    try { localStorage.setItem(PROJECTION_STORAGE_KEY, JSON.stringify(draftRates)); } catch { /* noop */ }
+    toast({ title: 'Projection rates saved', description: `Low ${draftRates.low}% · Medium ${draftRates.medium}% · High ${draftRates.high}%` });
+  };
+
+  // No-progress / stagnant indicators (≥2 historical points, no improvement)
+  const stagnant = useMemo(() => derived.filter(hasNoProgress), [derived]);
+
+  // Projections for the currently selected scenario across all indicators
+  const projections = useMemo(() => {
+    const rate = rates[scenario];
+    return derived.map(d => ({ d, p: computeProjection(d, rate) }));
+  }, [derived, rates, scenario]);
+
+  const projectionSummary = useMemo(() => {
+    let willMeet = 0, willMiss = 0, noData = 0;
+    projections.forEach(({ d, p }) => {
+      if (d.target_2035 == null || p.projected2035 == null) noData++;
+      else if (p.willMeetTarget) willMeet++;
+      else willMiss++;
+    });
+    return { willMeet, willMiss, noData, total: projections.length };
+  }, [projections]);
 
   const filtered = useMemo(() => derived.filter(d =>
     (aspirasiFilter === 'all' || d.aspirasi === aspirasiFilter) &&
@@ -213,9 +310,10 @@ export default function ManpowerAKPI() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-4 max-w-2xl">
+        <TabsList className="grid grid-cols-5 max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="indicators">Indicators</TabsTrigger>
+          <TabsTrigger value="projection">Projection</TabsTrigger>
           <TabsTrigger value="data-entry">Data Entry</TabsTrigger>
           <TabsTrigger value="definitions">Definitions</TabsTrigger>
         </TabsList>
@@ -331,6 +429,201 @@ export default function ManpowerAKPI() {
                 <Progress value={Math.min((d.progressPct ?? 0) * 100, 100)} className="h-1.5 mt-3" />
               </Card>
             ))}
+          </div>
+        </TabsContent>
+
+        {/* PROJECTION */}
+        <TabsContent value="projection" className="space-y-6 mt-6">
+          {/* Rate inputs */}
+          <Card className="glass-card p-5">
+            <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">Projection Rates</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Annual % change applied from each indicator's latest year through 2035.
+                  Higher-is-better KPIs grow by the rate; lower-is-better KPIs decline by the rate.
+                </p>
+              </div>
+              {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+                const meta = SCENARIO_META[s];
+                return (
+                  <div key={s} className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide" style={{ color: meta.color }}>{meta.label} (%)</label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="w-28"
+                      value={draftRates[s]}
+                      onChange={(e) => setDraftRates({ ...draftRates, [s]: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+                );
+              })}
+              <Button onClick={saveRates} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Save className="h-4 w-4 mr-2" /> Save Rates
+              </Button>
+            </div>
+          </Card>
+
+          {/* Scenario selector + summary */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">Active scenario:</span>
+            {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+              const meta = SCENARIO_META[s];
+              const Icon = meta.icon;
+              const active = scenario === s;
+              return (
+                <Button
+                  key={s}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScenario(s)}
+                  className={cn('border', active && 'ring-2')}
+                  style={{ borderColor: `${meta.color}60`, color: meta.color, background: active ? `${meta.color}15` : undefined }}
+                >
+                  <Icon className="h-3.5 w-3.5 mr-1.5" />
+                  {meta.label} · {rates[s]}%
+                </Button>
+              );
+            })}
+          </div>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="glass-card p-4 border-emerald-500/40">
+              <p className="text-xs uppercase tracking-wide text-emerald-400">Will meet 2035</p>
+              <p className="text-3xl font-bold text-emerald-400 mt-1">{projectionSummary.willMeet}</p>
+              <p className="text-xs text-muted-foreground mt-1">of {projectionSummary.total} indicators</p>
+            </Card>
+            <Card className="glass-card p-4 border-red-500/40">
+              <p className="text-xs uppercase tracking-wide text-red-400">Will miss 2035</p>
+              <p className="text-3xl font-bold text-red-400 mt-1">{projectionSummary.willMiss}</p>
+              <p className="text-xs text-muted-foreground mt-1">based on {SCENARIO_META[scenario].label.toLowerCase()}</p>
+            </Card>
+            <Card className="glass-card p-4 border-muted-foreground/30">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Insufficient data</p>
+              <p className="text-3xl font-bold mt-1">{projectionSummary.noData}</p>
+              <p className="text-xs text-muted-foreground mt-1">no latest value or no target</p>
+            </Card>
+            <Card className="glass-card p-4 border-amber-500/40">
+              <p className="text-xs uppercase tracking-wide text-amber-400">No progress yet</p>
+              <p className="text-3xl font-bold text-amber-400 mt-1">{stagnant.length}</p>
+              <p className="text-xs text-muted-foreground mt-1">historical trend flat or declining</p>
+            </Card>
+          </div>
+
+          {/* No-progress detail list */}
+          {stagnant.length > 0 && (
+            <Card className="glass-card p-4 border-amber-500/30">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <h3 className="font-semibold">Indicators showing no progress</h3>
+                <Badge variant="outline" className="text-amber-400 border-amber-500/40">{stagnant.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {stagnant.map(d => (
+                  <div key={d.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30 cursor-pointer" onClick={() => setDetail(d)}>
+                    <div className="w-12 text-xs font-mono text-muted-foreground">{d.akpi_code}</div>
+                    <p className="flex-1 text-sm truncate">{d.indicator_bm}</p>
+                    <span className="text-xs text-muted-foreground">Latest {d.latestValue ?? '—'} ({d.latestYear ?? '—'})</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Per-indicator projection cards with scenario sub-tabs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {derived.map(d => {
+              const results: Record<ProjectionScenario, ProjectionResult> = {
+                low: computeProjection(d, rates.low),
+                medium: computeProjection(d, rates.medium),
+                high: computeProjection(d, rates.high),
+              };
+              return (
+                <Card key={d.id} className="glass-card p-4">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-muted-foreground">{d.aspirasi} · {d.akpi_code}</p>
+                      <p className="font-medium text-sm mt-1 line-clamp-2">{d.indicator_bm}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Latest {d.latestValue ?? '—'} ({d.latestYear ?? '—'}) → Target {d.target_2035 ?? '—'} ·{' '}
+                        {d.isHigherBetter ? '↑ higher is better' : '↓ lower is better'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Tabs defaultValue={scenario}>
+                    <TabsList className="grid grid-cols-3 w-full h-8">
+                      {(['low','medium','high'] as ProjectionScenario[]).map(s => (
+                        <TabsTrigger key={s} value={s} className="text-xs">
+                          {SCENARIO_META[s].label.replace(' Projection','')} {rates[s]}%
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                    {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+                      const r = results[s];
+                      const meta = SCENARIO_META[s];
+                      const stag = hasNoProgress(d);
+                      return (
+                        <TabsContent key={s} value={s} className="mt-3 space-y-3">
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Projected 2035</p>
+                              <p className="text-lg font-bold" style={{ color: meta.color }}>
+                                {r.projected2035 == null ? '—' : r.projected2035.toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Vs. Target</p>
+                              <p className="text-lg font-bold">
+                                {r.projectedProgressPct == null ? '—' : `${Math.round(r.projectedProgressPct * 100)}%`}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Outcome</p>
+                              {r.projected2035 == null ? (
+                                <Badge variant="outline" className="text-muted-foreground">No data</Badge>
+                              ) : r.willMeetTarget ? (
+                                <Badge style={{ background: `${meta.color}25`, color: meta.color, borderColor: `${meta.color}60` }} variant="outline">Meets</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-red-400 border-red-500/40">Misses</Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <Progress
+                            value={r.projectedProgressPct == null ? 0 : Math.min(r.projectedProgressPct * 100, 100)}
+                            className="h-2"
+                          />
+
+                          {stag && (
+                            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded p-2">
+                              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span>No measurable progress in historical data — projection assumes new growth starting now.</span>
+                            </div>
+                          )}
+
+                          <ResponsiveContainer width="100%" height={160}>
+                            <LineChart data={r.trajectory}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis dataKey="year" tick={{ fontSize: 10 }} interval={2} />
+                              <YAxis tick={{ fontSize: 10 }} />
+                              <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', fontSize: 11 }} />
+                              <Line type="monotone" dataKey="historical" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} connectNulls name="Historical" />
+                              <Line type="monotone" dataKey="projected" stroke={meta.color} strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls name="Projected" />
+                              {d.target_2035 != null && (
+                                <Line type="monotone" dataKey="target" stroke={getStatusColor('On Track')} strokeDasharray="2 2" dot={false} name="Target" />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                </Card>
+              );
+            })}
           </div>
         </TabsContent>
 
