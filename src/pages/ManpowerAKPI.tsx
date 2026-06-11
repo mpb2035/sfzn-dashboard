@@ -273,9 +273,10 @@ export default function ManpowerAKPI() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-4 max-w-2xl">
+        <TabsList className="grid grid-cols-5 max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="indicators">Indicators</TabsTrigger>
+          <TabsTrigger value="projection">Projection</TabsTrigger>
           <TabsTrigger value="data-entry">Data Entry</TabsTrigger>
           <TabsTrigger value="definitions">Definitions</TabsTrigger>
         </TabsList>
