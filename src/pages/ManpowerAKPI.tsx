@@ -131,6 +131,43 @@ export default function ManpowerAKPI() {
   const [statusFilter, setStatusFilter] = useState<AKPIStatus | 'all'>('all');
   const [detail, setDetail] = useState<AKPIDerived | null>(null);
 
+  // Projection state — persisted in localStorage
+  const [rates, setRates] = useState<ProjectionRates>(() => {
+    try {
+      const raw = localStorage.getItem(PROJECTION_STORAGE_KEY);
+      if (raw) return { ...DEFAULT_RATES, ...JSON.parse(raw) };
+    } catch { /* noop */ }
+    return DEFAULT_RATES;
+  });
+  const [draftRates, setDraftRates] = useState<ProjectionRates>(rates);
+  const [scenario, setScenario] = useState<ProjectionScenario>('medium');
+  useEffect(() => { setDraftRates(rates); }, [rates]);
+
+  const saveRates = () => {
+    setRates(draftRates);
+    try { localStorage.setItem(PROJECTION_STORAGE_KEY, JSON.stringify(draftRates)); } catch { /* noop */ }
+    toast({ title: 'Projection rates saved', description: `Low ${draftRates.low}% · Medium ${draftRates.medium}% · High ${draftRates.high}%` });
+  };
+
+  // No-progress / stagnant indicators (≥2 historical points, no improvement)
+  const stagnant = useMemo(() => derived.filter(hasNoProgress), [derived]);
+
+  // Projections for the currently selected scenario across all indicators
+  const projections = useMemo(() => {
+    const rate = rates[scenario];
+    return derived.map(d => ({ d, p: computeProjection(d, rate) }));
+  }, [derived, rates, scenario]);
+
+  const projectionSummary = useMemo(() => {
+    let willMeet = 0, willMiss = 0, noData = 0;
+    projections.forEach(({ d, p }) => {
+      if (d.target_2035 == null || p.projected2035 == null) noData++;
+      else if (p.willMeetTarget) willMeet++;
+      else willMiss++;
+    });
+    return { willMeet, willMiss, noData, total: projections.length };
+  }, [projections]);
+
   const filtered = useMemo(() => derived.filter(d =>
     (aspirasiFilter === 'all' || d.aspirasi === aspirasiFilter) &&
     (statusFilter === 'all' || d.status === statusFilter)
