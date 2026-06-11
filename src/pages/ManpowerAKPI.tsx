@@ -22,8 +22,17 @@ const STATUS_ORDER: AKPIStatus[] = ['On Track', 'Needs Attention', 'Behind', 'No
 
 type ProjectionScenario = 'low' | 'medium' | 'high';
 interface ProjectionRates { low: number; medium: number; high: number }
-const PROJECTION_STORAGE_KEY = 'akpi_projection_rates_v1';
+const PROJECTION_STORAGE_KEY = 'akpi_projection_rates_v1'; // legacy single-set, migrated on load
+const SCENARIO_SETS_KEY = 'akpi_projection_scenario_sets_v1';
+const ACTIVE_SET_KEY = 'akpi_projection_active_set_v1';
 const DEFAULT_RATES: ProjectionRates = { low: 2, medium: 5, high: 10 };
+
+interface ScenarioSet { id: string; name: string; rates: ProjectionRates }
+const DEFAULT_SCENARIO_SETS: ScenarioSet[] = [
+  { id: 'default',      name: 'Default',      rates: { low: 2, medium: 5,  high: 10 } },
+  { id: 'conservative', name: 'Conservative', rates: { low: 1, medium: 3,  high: 6  } },
+  { id: 'aggressive',   name: 'Aggressive',   rates: { low: 5, medium: 10, high: 15 } },
+];
 const SCENARIO_META: Record<ProjectionScenario, { label: string; color: string; icon: typeof Activity }> = {
   low:    { label: 'Low Projection',    color: 'hsl(0 84% 60%)',  icon: TrendingDown },
   medium: { label: 'Medium Projection', color: 'hsl(38 92% 50%)', icon: Activity },
