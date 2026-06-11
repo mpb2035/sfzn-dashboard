@@ -149,13 +149,91 @@ export default function ManpowerAKPI() {
     return DEFAULT_RATES;
   });
   const [draftRates, setDraftRates] = useState<ProjectionRates>(rates);
+  // Projection scenarios — multiple named sets persisted in localStorage
+  const [scenarioSets, setScenarioSets] = useState<ScenarioSet[]>(() => {
+    try {
+      const raw = localStorage.getItem(SCENARIO_SETS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ScenarioSet[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+      // Migrate legacy single-set storage into a "Custom" scenario
+      const legacy = localStorage.getItem(PROJECTION_STORAGE_KEY);
+      if (legacy) {
+        const r = { ...DEFAULT_RATES, ...JSON.parse(legacy) } as ProjectionRates;
+        return [{ id: 'custom', name: 'Custom', rates: r }, ...DEFAULT_SCENARIO_SETS];
+      }
+    } catch { /* noop */ }
+    return DEFAULT_SCENARIO_SETS;
+  });
+  const [activeSetId, setActiveSetId] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(ACTIVE_SET_KEY);
+      if (stored) return stored;
+    } catch { /* noop */ }
+    return 'default';
+  });
+
+  const activeSet = scenarioSets.find(s => s.id === activeSetId) ?? scenarioSets[0];
+  const rates: ProjectionRates = activeSet?.rates ?? DEFAULT_RATES;
+
+  const [draftRates, setDraftRates] = useState<ProjectionRates>(rates);
   const [scenario, setScenario] = useState<ProjectionScenario>('medium');
-  useEffect(() => { setDraftRates(rates); }, [rates]);
+  useEffect(() => { setDraftRates(rates); }, [activeSetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist whenever sets change
+  useEffect(() => {
+    try { localStorage.setItem(SCENARIO_SETS_KEY, JSON.stringify(scenarioSets)); } catch { /* noop */ }
+  }, [scenarioSets]);
+  useEffect(() => {
+    try { localStorage.setItem(ACTIVE_SET_KEY, activeSetId); } catch { /* noop */ }
+  }, [activeSetId]);
 
   const saveRates = () => {
-    setRates(draftRates);
-    try { localStorage.setItem(PROJECTION_STORAGE_KEY, JSON.stringify(draftRates)); } catch { /* noop */ }
-    toast({ title: 'Projection rates saved', description: `Low ${draftRates.low}% · Medium ${draftRates.medium}% · High ${draftRates.high}%` });
+    setScenarioSets(prev => prev.map(s => s.id === activeSetId ? { ...s, rates: draftRates } : s));
+    toast({ title: `"${activeSet?.name}" updated`, description: `Low ${draftRates.low}% · Medium ${draftRates.medium}% · High ${draftRates.high}%` });
+  };
+
+  const createScenarioSet = () => {
+    const name = window.prompt('Name this scenario set:', `Scenario ${scenarioSets.length + 1}`);
+    if (!name?.trim()) return;
+    const id = `s_${Date.now()}`;
+    setScenarioSets(prev => [...prev, { id, name: name.trim(), rates: { ...draftRates } }]);
+    setActiveSetId(id);
+    toast({ title: 'Scenario created', description: name.trim() });
+  };
+
+  const renameScenarioSet = () => {
+    if (!activeSet) return;
+    const name = window.prompt('Rename scenario:', activeSet.name);
+    if (!name?.trim()) return;
+    setScenarioSets(prev => prev.map(s => s.id === activeSetId ? { ...s, name: name.trim() } : s));
+  };
+
+  const duplicateScenarioSet = () => {
+    if (!activeSet) return;
+    const id = `s_${Date.now()}`;
+    const copy: ScenarioSet = { id, name: `${activeSet.name} (copy)`, rates: { ...activeSet.rates } };
+    setScenarioSets(prev => [...prev, copy]);
+    setActiveSetId(id);
+  };
+
+  const deleteScenarioSet = () => {
+    if (!activeSet) return;
+    if (scenarioSets.length <= 1) {
+      toast({ title: 'Cannot delete', description: 'At least one scenario set must remain.', variant: 'destructive' });
+      return;
+    }
+    if (!window.confirm(`Delete scenario "${activeSet.name}"?`)) return;
+    const remaining = scenarioSets.filter(s => s.id !== activeSetId);
+    setScenarioSets(remaining);
+    setActiveSetId(remaining[0].id);
+  };
+
+  const resetToDefaults = () => {
+    if (!window.confirm('Reset all scenario sets to the built-in defaults? Custom sets will be removed.')) return;
+    setScenarioSets(DEFAULT_SCENARIO_SETS);
+    setActiveSetId('default');
   };
 
   // No-progress / stagnant indicators (≥2 historical points, no improvement)
