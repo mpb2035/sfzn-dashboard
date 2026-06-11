@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAKPI, AKPI_YEARS, HISTORICAL_YEARS, AKPIDerived, AKPIStatus, getStatusColor } from '@/hooks/useAKPI';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Download, Info, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HelpCircle, Target } from 'lucide-react';
+import { Loader2, Download, Info, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HelpCircle, Target, Activity, Zap, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
@@ -19,6 +19,66 @@ import {
 import * as XLSX from 'xlsx';
 
 const STATUS_ORDER: AKPIStatus[] = ['On Track', 'Needs Attention', 'Behind', 'No Data', 'Target Not Set'];
+
+type ProjectionScenario = 'low' | 'medium' | 'high';
+interface ProjectionRates { low: number; medium: number; high: number }
+const PROJECTION_STORAGE_KEY = 'akpi_projection_rates_v1';
+const DEFAULT_RATES: ProjectionRates = { low: 2, medium: 5, high: 10 };
+const SCENARIO_META: Record<ProjectionScenario, { label: string; color: string; icon: typeof Activity }> = {
+  low:    { label: 'Low Projection',    color: 'hsl(0 84% 60%)',  icon: TrendingDown },
+  medium: { label: 'Medium Projection', color: 'hsl(38 92% 50%)', icon: Activity },
+  high:   { label: 'High Projection',   color: 'hsl(142 71% 45%)', icon: Zap },
+};
+
+interface ProjectionResult {
+  projected2035: number | null;
+  projectedProgressPct: number | null;
+  willMeetTarget: boolean;
+  trajectory: { year: string; historical: number | null; projected: number | null; target: number | null }[];
+}
+
+function computeProjection(d: AKPIDerived, ratePct: number): ProjectionResult {
+  const empty: ProjectionResult = { projected2035: null, projectedProgressPct: null, willMeetTarget: false, trajectory: [] };
+  if (d.latestValue == null || d.latestYear == null) return empty;
+  const r = ratePct / 100;
+  const trajectory = AKPI_YEARS.map(y => {
+    if (y < d.latestYear!) {
+      const v = d.values[y];
+      return { year: String(y), historical: v == null ? null : Number(v), projected: null as number | null, target: d.target_2035 };
+    }
+    if (y === d.latestYear) {
+      return { year: String(y), historical: d.latestValue, projected: d.latestValue, target: d.target_2035 };
+    }
+    const yrs = y - d.latestYear!;
+    const factor = d.isHigherBetter ? Math.pow(1 + r, yrs) : Math.pow(Math.max(1 - r, 0), yrs);
+    return { year: String(y), historical: null, projected: d.latestValue! * factor, target: d.target_2035 };
+  });
+  const projected2035 = trajectory[trajectory.length - 1].projected;
+  let projectedProgressPct: number | null = null;
+  let willMeetTarget = false;
+  if (d.target_2035 != null && projected2035 != null) {
+    if (d.isHigherBetter) {
+      projectedProgressPct = d.target_2035 === 0 ? (projected2035 >= 0 ? 1 : 0) : projected2035 / d.target_2035;
+      willMeetTarget = projected2035 >= d.target_2035;
+    } else {
+      projectedProgressPct = d.target_2035 === 0 ? (projected2035 === 0 ? 1 : 0) : d.target_2035 / Math.max(projected2035, 0.0001);
+      willMeetTarget = projected2035 <= d.target_2035;
+    }
+  }
+  return { projected2035, projectedProgressPct, willMeetTarget, trajectory };
+}
+
+function hasNoProgress(d: AKPIDerived): boolean {
+  const points: number[] = [];
+  for (const y of HISTORICAL_YEARS) {
+    const v = d.values[y];
+    if (v != null && !Number.isNaN(Number(v))) points.push(Number(v));
+  }
+  if (points.length < 2) return false;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return d.isHigherBetter ? last <= first : last >= first;
+}
 
 const StatusBadge = ({ status }: { status: AKPIStatus }) => (
   <Badge style={{ background: `${getStatusColor(status)}25`, color: getStatusColor(status), borderColor: `${getStatusColor(status)}50` }} variant="outline">
