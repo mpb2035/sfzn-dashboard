@@ -432,6 +432,201 @@ export default function ManpowerAKPI() {
           </div>
         </TabsContent>
 
+        {/* PROJECTION */}
+        <TabsContent value="projection" className="space-y-6 mt-6">
+          {/* Rate inputs */}
+          <Card className="glass-card p-5">
+            <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg">Projection Rates</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Annual % change applied from each indicator's latest year through 2035.
+                  Higher-is-better KPIs grow by the rate; lower-is-better KPIs decline by the rate.
+                </p>
+              </div>
+              {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+                const meta = SCENARIO_META[s];
+                return (
+                  <div key={s} className="space-y-1">
+                    <label className="text-xs uppercase tracking-wide" style={{ color: meta.color }}>{meta.label} (%)</label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="w-28"
+                      value={draftRates[s]}
+                      onChange={(e) => setDraftRates({ ...draftRates, [s]: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+                );
+              })}
+              <Button onClick={saveRates} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Save className="h-4 w-4 mr-2" /> Save Rates
+              </Button>
+            </div>
+          </Card>
+
+          {/* Scenario selector + summary */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">Active scenario:</span>
+            {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+              const meta = SCENARIO_META[s];
+              const Icon = meta.icon;
+              const active = scenario === s;
+              return (
+                <Button
+                  key={s}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScenario(s)}
+                  className={cn('border', active && 'ring-2')}
+                  style={{ borderColor: `${meta.color}60`, color: meta.color, background: active ? `${meta.color}15` : undefined }}
+                >
+                  <Icon className="h-3.5 w-3.5 mr-1.5" />
+                  {meta.label} · {rates[s]}%
+                </Button>
+              );
+            })}
+          </div>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="glass-card p-4 border-emerald-500/40">
+              <p className="text-xs uppercase tracking-wide text-emerald-400">Will meet 2035</p>
+              <p className="text-3xl font-bold text-emerald-400 mt-1">{projectionSummary.willMeet}</p>
+              <p className="text-xs text-muted-foreground mt-1">of {projectionSummary.total} indicators</p>
+            </Card>
+            <Card className="glass-card p-4 border-red-500/40">
+              <p className="text-xs uppercase tracking-wide text-red-400">Will miss 2035</p>
+              <p className="text-3xl font-bold text-red-400 mt-1">{projectionSummary.willMiss}</p>
+              <p className="text-xs text-muted-foreground mt-1">based on {SCENARIO_META[scenario].label.toLowerCase()}</p>
+            </Card>
+            <Card className="glass-card p-4 border-muted-foreground/30">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Insufficient data</p>
+              <p className="text-3xl font-bold mt-1">{projectionSummary.noData}</p>
+              <p className="text-xs text-muted-foreground mt-1">no latest value or no target</p>
+            </Card>
+            <Card className="glass-card p-4 border-amber-500/40">
+              <p className="text-xs uppercase tracking-wide text-amber-400">No progress yet</p>
+              <p className="text-3xl font-bold text-amber-400 mt-1">{stagnant.length}</p>
+              <p className="text-xs text-muted-foreground mt-1">historical trend flat or declining</p>
+            </Card>
+          </div>
+
+          {/* No-progress detail list */}
+          {stagnant.length > 0 && (
+            <Card className="glass-card p-4 border-amber-500/30">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <h3 className="font-semibold">Indicators showing no progress</h3>
+                <Badge variant="outline" className="text-amber-400 border-amber-500/40">{stagnant.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {stagnant.map(d => (
+                  <div key={d.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30 cursor-pointer" onClick={() => setDetail(d)}>
+                    <div className="w-12 text-xs font-mono text-muted-foreground">{d.akpi_code}</div>
+                    <p className="flex-1 text-sm truncate">{d.indicator_bm}</p>
+                    <span className="text-xs text-muted-foreground">Latest {d.latestValue ?? '—'} ({d.latestYear ?? '—'})</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Per-indicator projection cards with scenario sub-tabs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {derived.map(d => {
+              const results: Record<ProjectionScenario, ProjectionResult> = {
+                low: computeProjection(d, rates.low),
+                medium: computeProjection(d, rates.medium),
+                high: computeProjection(d, rates.high),
+              };
+              return (
+                <Card key={d.id} className="glass-card p-4">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-muted-foreground">{d.aspirasi} · {d.akpi_code}</p>
+                      <p className="font-medium text-sm mt-1 line-clamp-2">{d.indicator_bm}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Latest {d.latestValue ?? '—'} ({d.latestYear ?? '—'}) → Target {d.target_2035 ?? '—'} ·{' '}
+                        {d.isHigherBetter ? '↑ higher is better' : '↓ lower is better'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Tabs defaultValue={scenario}>
+                    <TabsList className="grid grid-cols-3 w-full h-8">
+                      {(['low','medium','high'] as ProjectionScenario[]).map(s => (
+                        <TabsTrigger key={s} value={s} className="text-xs">
+                          {SCENARIO_META[s].label.replace(' Projection','')} {rates[s]}%
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                    {(['low','medium','high'] as ProjectionScenario[]).map(s => {
+                      const r = results[s];
+                      const meta = SCENARIO_META[s];
+                      const stag = hasNoProgress(d);
+                      return (
+                        <TabsContent key={s} value={s} className="mt-3 space-y-3">
+                          <div className="grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Projected 2035</p>
+                              <p className="text-lg font-bold" style={{ color: meta.color }}>
+                                {r.projected2035 == null ? '—' : r.projected2035.toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Vs. Target</p>
+                              <p className="text-lg font-bold">
+                                {r.projectedProgressPct == null ? '—' : `${Math.round(r.projectedProgressPct * 100)}%`}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-muted-foreground">Outcome</p>
+                              {r.projected2035 == null ? (
+                                <Badge variant="outline" className="text-muted-foreground">No data</Badge>
+                              ) : r.willMeetTarget ? (
+                                <Badge style={{ background: `${meta.color}25`, color: meta.color, borderColor: `${meta.color}60` }} variant="outline">Meets</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-red-400 border-red-500/40">Misses</Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <Progress
+                            value={r.projectedProgressPct == null ? 0 : Math.min(r.projectedProgressPct * 100, 100)}
+                            className="h-2"
+                          />
+
+                          {stag && (
+                            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded p-2">
+                              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span>No measurable progress in historical data — projection assumes new growth starting now.</span>
+                            </div>
+                          )}
+
+                          <ResponsiveContainer width="100%" height={160}>
+                            <LineChart data={r.trajectory}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis dataKey="year" tick={{ fontSize: 10 }} interval={2} />
+                              <YAxis tick={{ fontSize: 10 }} />
+                              <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', fontSize: 11 }} />
+                              <Line type="monotone" dataKey="historical" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 2 }} connectNulls name="Historical" />
+                              <Line type="monotone" dataKey="projected" stroke={meta.color} strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls name="Projected" />
+                              {d.target_2035 != null && (
+                                <Line type="monotone" dataKey="target" stroke={getStatusColor('On Track')} strokeDasharray="2 2" dot={false} name="Target" />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                </Card>
+              );
+            })}
+          </div>
+        </TabsContent>
+
         {/* DATA ENTRY */}
         <TabsContent value="data-entry" className="mt-6">
           <Card className="glass-card p-4">
