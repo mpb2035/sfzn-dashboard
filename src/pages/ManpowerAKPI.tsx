@@ -512,15 +512,46 @@ export default function ManpowerAKPI() {
 
         {/* PROJECTION */}
         <TabsContent value="projection" className="space-y-6 mt-6">
-          {/* Rate inputs */}
-          <Card className="glass-card p-5">
-            <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg">Projection Rates</h3>
+          {/* Scenario set manager + rate inputs */}
+          <Card className="glass-card p-5 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:gap-4">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-lg">Projection Scenarios</h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Annual % change applied from each indicator's latest year through 2035.
-                  Higher-is-better KPIs grow by the rate; lower-is-better KPIs decline by the rate.
+                  Switch between saved scenario sets. Each set holds its own Low / Medium / High annual % rates
+                  applied from each indicator's latest year through 2035.
                 </p>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground">Active Scenario Set</label>
+                <Select value={activeSetId} onValueChange={setActiveSetId}>
+                  <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {scenarioSets.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({s.rates.low}/{s.rates.medium}/{s.rates.high}%)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={createScenarioSet}>+ New</Button>
+                <Button variant="outline" size="sm" onClick={duplicateScenarioSet}>Duplicate</Button>
+                <Button variant="outline" size="sm" onClick={renameScenarioSet}>Rename</Button>
+                <Button variant="outline" size="sm" onClick={deleteScenarioSet} className="text-red-400 border-red-500/40 hover:bg-red-500/10">
+                  Delete
+                </Button>
+                <Button variant="ghost" size="sm" onClick={resetToDefaults} className="text-muted-foreground">
+                  Reset defaults
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t border-border/40 pt-4 flex flex-col md:flex-row md:items-end gap-4 md:gap-6">
+              <div className="flex-1">
+                <p className="text-sm font-medium">Rates for "{activeSet?.name}"</p>
+                <p className="text-xs text-muted-foreground">Edit values, then click Save to update this scenario set.</p>
               </div>
               {(['low','medium','high'] as ProjectionScenario[]).map(s => {
                 const meta = SCENARIO_META[s];
@@ -537,11 +568,16 @@ export default function ManpowerAKPI() {
                   </div>
                 );
               })}
-              <Button onClick={saveRates} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button
+                onClick={saveRates}
+                disabled={JSON.stringify(draftRates) === JSON.stringify(rates)}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
                 <Save className="h-4 w-4 mr-2" /> Save Rates
               </Button>
             </div>
           </Card>
+
 
           {/* Scenario selector + summary */}
           <div className="flex flex-wrap items-center gap-3">
