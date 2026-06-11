@@ -140,15 +140,6 @@ export default function ManpowerAKPI() {
   const [statusFilter, setStatusFilter] = useState<AKPIStatus | 'all'>('all');
   const [detail, setDetail] = useState<AKPIDerived | null>(null);
 
-  // Projection state — persisted in localStorage
-  const [rates, setRates] = useState<ProjectionRates>(() => {
-    try {
-      const raw = localStorage.getItem(PROJECTION_STORAGE_KEY);
-      if (raw) return { ...DEFAULT_RATES, ...JSON.parse(raw) };
-    } catch { /* noop */ }
-    return DEFAULT_RATES;
-  });
-  const [draftRates, setDraftRates] = useState<ProjectionRates>(rates);
   // Projection scenarios — multiple named sets persisted in localStorage
   const [scenarioSets, setScenarioSets] = useState<ScenarioSet[]>(() => {
     try {
