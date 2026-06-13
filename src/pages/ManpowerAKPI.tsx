@@ -1034,11 +1034,13 @@ export default function ManpowerAKPI() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs">Target 2035</label>
-                      <Input
+                      <ClickToEditField
+                        value={detail.target_2035}
                         type="number"
-                        defaultValue={detail.target_2035 ?? ''}
-                        onBlur={async (e) => {
-                          const v = e.target.value === '' ? null : Number(e.target.value);
+                        placeholder="Click to set target"
+                        onCommit={async (raw) => {
+                          const v = raw.trim() === '' ? null : Number(raw);
+                          if (raw.trim() !== '' && Number.isNaN(v as number)) return;
                           await updateIndicator(detail.id, { target_2035: v });
                           toast({ title: 'Target updated' });
                         }}
