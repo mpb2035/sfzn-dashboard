@@ -1012,20 +1012,8 @@ export default function ManpowerAKPI() {
                 <div><p className="text-xs text-muted-foreground">Status</p><StatusBadge status={detail.status} /></div>
               </div>
 
-              <div>
-                <p className="text-sm font-semibold mb-2">Trend</p>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={AKPI_YEARS.map(y => ({ year: String(y), value: detail.values[y] ?? null, target: detail.target_2035 }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))' }} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} connectNulls dot={{ r: 3 }} />
-                    {detail.target_2035 != null && <Line type="monotone" dataKey="target" stroke={getStatusColor('On Track')} strokeDasharray="4 4" dot={false} />}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <DetailTrendChart d={detail} />
+
 
               {(detail.definition_bm || detail.definition_en) && (
                 <div className="text-sm space-y-1">
