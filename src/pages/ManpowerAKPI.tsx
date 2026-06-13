@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Download, Info, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HelpCircle, Target, Activity, Zap, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
