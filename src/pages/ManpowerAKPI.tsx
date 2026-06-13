@@ -195,6 +195,127 @@ function computeLinearTrend(d: AKPIDerived): { slope: number; intercept: number;
   return { slope, intercept, n, firstYear: pts[0].x, lastYear: pts[pts.length - 1].x, r2 };
 }
 
+// Interactive trend chart for the indicator detail dialog.
+const DetailTrendChart = ({ d }: { d: AKPIDerived }) => {
+  const trend = useMemo(() => computeLinearTrend(d), [d]);
+  const [showTrendline, setShowTrendline] = useState(true);
+  const [showCustom, setShowCustom] = useState(false);
+  const [growthPct, setGrowthPct] = useState<number>(3);
+
+  const chartData = useMemo(() => {
+    const latestY = d.latestYear;
+    const latestV = d.latestValue;
+    return AKPI_YEARS.map(y => {
+      const actual = d.values[y];
+      const row: any = {
+        year: String(y),
+        value: actual == null ? null : Number(actual),
+        target: d.target_2035,
+      };
+      // Linear trendline projection: extend slope across full range
+      if (trend) {
+        row.trendline = trend.slope * y + trend.intercept;
+      }
+      // Custom % growth projection, anchored at latest historical year
+      if (latestY != null && latestV != null) {
+        if (y < latestY) row.customGrowth = null;
+        else if (y === latestY) row.customGrowth = latestV;
+        else {
+          const yrs = y - latestY;
+          const r = growthPct / 100;
+          const factor = d.isHigherBetter ? Math.pow(1 + r, yrs) : Math.pow(Math.max(1 - r, 0), yrs);
+          row.customGrowth = latestV * factor;
+        }
+      }
+      return row;
+    });
+  }, [d, trend, growthPct]);
+
+  // Trendline-projected 2035 value
+  const trend2035 = trend ? trend.slope * 2035 + trend.intercept : null;
+  const custom2035 = useMemo(() => {
+    if (d.latestYear == null || d.latestValue == null) return null;
+    const yrs = 2035 - d.latestYear;
+    const r = growthPct / 100;
+    const factor = d.isHigherBetter ? Math.pow(1 + r, yrs) : Math.pow(Math.max(1 - r, 0), yrs);
+    return d.latestValue * factor;
+  }, [d, growthPct]);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-semibold">Trend</p>
+
+      {/* Trendline descriptor */}
+      <div className="rounded-md border border-border/50 bg-muted/20 p-3 text-xs space-y-1">
+        {trend ? (
+          <>
+            <p className="font-medium text-foreground">
+              Average linear trend ({trend.firstYear}–{trend.lastYear}, n={trend.n})
+            </p>
+            <p className="text-muted-foreground">
+              Slope: <span className="text-foreground font-mono">{trend.slope >= 0 ? '+' : ''}{trend.slope.toFixed(3)}</span> per year ·
+              {' '}Fit (R²): <span className="text-foreground font-mono">{trend.r2.toFixed(3)}</span>
+              {trend2035 != null && <> · Projected 2035 (trendline): <span className="text-foreground font-mono">{trend2035.toFixed(2)}</span></>}
+            </p>
+            <p className="text-muted-foreground">
+              y = {trend.slope.toFixed(3)} · year {trend.intercept >= 0 ? '+' : '−'} {Math.abs(trend.intercept).toFixed(2)}
+            </p>
+          </>
+        ) : (
+          <p className="text-muted-foreground">Not enough historical data points to compute an average trendline (need at least 2).</p>
+        )}
+      </div>
+
+      {/* Toggle controls */}
+      <div className="flex flex-wrap items-center gap-4 text-xs">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox checked={showTrendline} onCheckedChange={(v) => setShowTrendline(!!v)} disabled={!trend} />
+          <span>Show average trendline to 2035</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox checked={showCustom} onCheckedChange={(v) => setShowCustom(!!v)} />
+          <span>Show custom growth projection</span>
+        </label>
+        {showCustom && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">% YoY:</span>
+            <Input
+              type="number"
+              step="0.1"
+              value={growthPct}
+              onChange={(e) => setGrowthPct(Number(e.target.value) || 0)}
+              className="h-7 w-20 text-xs"
+            />
+            {custom2035 != null && (
+              <span className="text-muted-foreground">→ 2035: <span className="text-foreground font-mono">{custom2035.toFixed(2)}</span></span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))' }} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Line type="monotone" dataKey="value" name="Historical" stroke="hsl(var(--primary))" strokeWidth={2} connectNulls dot={{ r: 3 }} />
+          {d.target_2035 != null && (
+            <Line type="monotone" dataKey="target" name="Target" stroke={getStatusColor('On Track')} strokeDasharray="4 4" dot={false} />
+          )}
+          {showTrendline && trend && (
+            <Line type="monotone" dataKey="trendline" name="Avg Trendline" stroke="hsl(38 92% 50%)" strokeDasharray="6 3" strokeWidth={2} dot={false} />
+          )}
+          {showCustom && (
+            <Line type="monotone" dataKey="customGrowth" name={`Custom +${growthPct}% YoY`} stroke="hsl(263 70% 60%)" strokeDasharray="2 4" strokeWidth={2} dot={false} connectNulls />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
 
 export default function ManpowerAKPI() {
   const { derived, loading, saveValue, updateIndicator } = useAKPI();
