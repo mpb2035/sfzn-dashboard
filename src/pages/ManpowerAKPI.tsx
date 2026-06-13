@@ -132,6 +132,70 @@ const ValueCell = ({
   );
 };
 
+// Click-to-activate field. Renders as a read-only box until clicked, then becomes an Input.
+const ClickToEditField = ({
+  value, type = 'text', placeholder, onCommit, className,
+}: { value: string | number | null | undefined; type?: 'text' | 'number'; placeholder?: string; onCommit: (raw: string) => void | Promise<void>; className?: string }) => {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value == null ? '' : String(value));
+  useEffect(() => { if (!editing) setText(value == null ? '' : String(value)); }, [value, editing]);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className={cn(
+          'flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm text-left hover:border-primary/50 transition',
+          (value == null || value === '') && 'text-muted-foreground',
+          className,
+        )}
+      >
+        {value == null || value === '' ? (placeholder || 'Click to edit') : String(value)}
+      </button>
+    );
+  }
+  const commit = async () => {
+    await onCommit(text);
+    setEditing(false);
+  };
+  return (
+    <Input
+      autoFocus
+      type={type}
+      className={className}
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(value == null ? '' : String(value)); setEditing(false); } }}
+    />
+  );
+};
+
+// Linear regression on historical (year, value) points.
+function computeLinearTrend(d: AKPIDerived): { slope: number; intercept: number; n: number; firstYear: number; lastYear: number; r2: number } | null {
+  const pts: { x: number; y: number }[] = [];
+  for (const y of HISTORICAL_YEARS) {
+    const v = d.values[y];
+    if (v != null && !Number.isNaN(Number(v))) pts.push({ x: y, y: Number(v) });
+  }
+  if (pts.length < 2) return null;
+  const n = pts.length;
+  const sumX = pts.reduce((a, p) => a + p.x, 0);
+  const sumY = pts.reduce((a, p) => a + p.y, 0);
+  const meanX = sumX / n, meanY = sumY / n;
+  let num = 0, den = 0, ssTot = 0;
+  for (const p of pts) { num += (p.x - meanX) * (p.y - meanY); den += (p.x - meanX) ** 2; ssTot += (p.y - meanY) ** 2; }
+  if (den === 0) return null;
+  const slope = num / den;
+  const intercept = meanY - slope * meanX;
+  let ssRes = 0;
+  for (const p of pts) { const yhat = slope * p.x + intercept; ssRes += (p.y - yhat) ** 2; }
+  const r2 = ssTot === 0 ? 1 : 1 - ssRes / ssTot;
+  return { slope, intercept, n, firstYear: pts[0].x, lastYear: pts[pts.length - 1].x, r2 };
+}
+
+
 export default function ManpowerAKPI() {
   const { derived, loading, saveValue, updateIndicator } = useAKPI();
   const { isAdmin } = useUserRole();
