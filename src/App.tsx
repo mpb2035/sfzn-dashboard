@@ -82,9 +82,15 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
-        <AppRoutes />
-      </BrowserRouter>
+      {import.meta.env.PROD ? (
+        <HashRouter>
+          <AppRoutes />
+        </HashRouter>
+      ) : (
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <AppRoutes />
+        </BrowserRouter>
+      )}
     </TooltipProvider>
   </QueryClientProvider>
 );
